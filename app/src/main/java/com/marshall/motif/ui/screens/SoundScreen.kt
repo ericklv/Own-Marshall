@@ -206,7 +206,7 @@ fun SoundScreen(
                 }
                 Spacer(Modifier.height(Space.Md))
                 EqSnapshotRow(ble)
-                HintText("Five Motif bands (160 Hz–6.2 kHz, ±6 dB) over the official Airoha SPP link.")
+                HintText("Five bands, 160 Hz–6.2 kHz. Up to ±6 dB is Marshall's range; beyond that, up to ±12 dB, for a more aggressive EQ.")
             }
         }
     }

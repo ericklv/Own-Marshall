@@ -1,5 +1,6 @@
 package com.marshall.motif.ui.components
 
+import com.marshall.motif.ble.AirohaPeq
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -30,10 +31,10 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val BAND_COUNT = 5
-private const val MIN_DB = -6
-private const val MAX_DB = 6
+private const val MIN_DB = -AirohaPeq.MAX_GAIN_DB
+private const val MAX_DB = AirohaPeq.MAX_GAIN_DB
 
-/** Same response plot as Basic EQ; the five dots are the ±6 dB handles. */
+/** Same response plot as Basic EQ; the five dots are the gain handles. */
 @Composable
 fun GraphicEqSliders(
     values: List<Int>,

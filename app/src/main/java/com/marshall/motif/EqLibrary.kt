@@ -1,6 +1,7 @@
 package com.marshall.motif
 
 import android.content.Context
+import com.marshall.motif.ble.AirohaPeq
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,7 +13,7 @@ class EqLibrary(context: Context) {
     fun lastBands(): List<Int> {
         val raw = prefs.getString("last", null) ?: return listOf(0, 0, 0, 0, 0)
         return raw.split(",").mapNotNull { it.toIntOrNull() }.let { parsed ->
-            (0 until 5).map { parsed.getOrElse(it) { 0 }.coerceIn(-6, 6) }
+            (0 until 5).map { parsed.getOrElse(it) { 0 }.coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB) }
         }
     }
 
@@ -36,7 +37,7 @@ class EqLibrary(context: Context) {
                 val bands = o.optJSONArray("bands") ?: return@mapNotNull null
                 EqSnapshot(
                     name,
-                    (0 until 5).map { bands.optInt(it, 0).coerceIn(-6, 6) },
+                    (0 until 5).map { bands.optInt(it, 0).coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB) },
                 )
             }
         }.getOrDefault(emptyList())
@@ -45,7 +46,7 @@ class EqLibrary(context: Context) {
     fun saveSnapshot(name: String, bands: List<Int>) {
         val clean = name.trim().ifBlank { return }
         val next = snapshots().filterNot { it.name.equals(clean, ignoreCase = true) } +
-            EqSnapshot(clean, (0 until 5).map { bands.getOrElse(it) { 0 }.coerceIn(-6, 6) })
+            EqSnapshot(clean, (0 until 5).map { bands.getOrElse(it) { 0 }.coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB) })
         write(next.takeLast(8))
     }
 

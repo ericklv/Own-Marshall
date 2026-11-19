@@ -1,5 +1,6 @@
 package com.marshall.motif.ui.components
 
+import com.marshall.motif.ble.AirohaPeq
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,7 +57,7 @@ fun CustomEqSliders(
                     value = value.toFloat(),
                     onValueChange = { next ->
                         dragging = true
-                        val snapped = next.roundToInt().coerceIn(-6, 6)
+                        val snapped = next.roundToInt().coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB)
                         local = local.toMutableList().apply { this[index] = snapped }
                         onValueChange(index, snapped)
                     },
@@ -64,8 +65,8 @@ fun CustomEqSliders(
                         dragging = false
                         onCommit(local)
                     },
-                    valueRange = -6f..6f,
-                    steps = 11,
+                    valueRange = -AirohaPeq.MAX_GAIN_DB.toFloat()..AirohaPeq.MAX_GAIN_DB.toFloat(),
+                    steps = AirohaPeq.MAX_GAIN_DB * 2 - 1,
                     enabled = enabled,
                     modifier = Modifier.weight(2f),
                     colors = SliderDefaults.colors(

@@ -10,10 +10,13 @@ import kotlin.math.sin
 /**
  * Motif II (CustomEQType.PLANT) custom EQ from the official Marshall app.
  *
- * Five user bands, all BAND_PASS, gains ±6 dB. Realtime RACE 0x0E03 payload
+ * Five user bands, all BAND_PASS. Official app uses ±6 dB; we allow ±12. Realtime RACE 0x0E03 payload
  * is NativePeq coefficients per sample rate — not a raw DSP_PARA_PEQ_STRU.
  */
 object AirohaPeq {
+
+    /** Gain limit per band; NativePeq rescales coefficients for headroom. */
+    const val MAX_GAIN_DB = 12
 
     val BAND_HZ: IntArray = intArrayOf(160, 400, 1000, 2500, 6250)
     private val BAND_Q: FloatArray = floatArrayOf(0.7f, 0.7f, 1.0f, 1.0f, 1.0f)
@@ -51,7 +54,7 @@ object AirohaPeq {
      *   repeating [rateId(2) + coefCount(2) + native coefs]
      */
     fun realtimeUpdate(bandsDb: List<Int>, maxPacketBytes: Int = 240): ByteArray? {
-        val gains = (0 until 5).map { bandsDb.getOrElse(it) { 0 }.coerceIn(-6, 6).toDouble() }
+        val gains = (0 until 5).map { bandsDb.getOrElse(it) { 0 }.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB).toDouble() }
         val chunks = ArrayList<ByteArray>()
         try {
             RATES.forEachIndexed { index, hz ->

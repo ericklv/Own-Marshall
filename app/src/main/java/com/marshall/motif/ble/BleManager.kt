@@ -1395,13 +1395,13 @@ class BleManager private constructor(private val context: Context) {
         if (index !in 0..4) return
         val next = state.customEq.toMutableList().apply {
             while (size < 5) add(0)
-            this[index] = value.coerceIn(-6, 6)
+            this[index] = value.coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB)
         }
         setCustomEq(next)
     }
 
     fun setCustomEq(bands: List<Int>, fromSnapshot: String? = null) {
-        val next = (0 until 5).map { bands.getOrElse(it) { 0 }.coerceIn(-6, 6) }
+        val next = (0 until 5).map { bands.getOrElse(it) { 0 }.coerceIn(-AirohaPeq.MAX_GAIN_DB, AirohaPeq.MAX_GAIN_DB) }
         holdEqPreset(Protocol.EqPreset.CUSTOM.id)
         val active = fromSnapshot
             ?: eqLibrary.snapshots().firstOrNull { it.bands == next }?.name

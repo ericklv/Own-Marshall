@@ -35,7 +35,7 @@ should hold the BLE / SPP connection to the device.
 - Factory EQ: Marshall, Bass boost, Mid boost, Treble, Mid reduction
   (GATT `0017` on profile 2)
 - **Custom 5-band EQ** on Motif II — drag the same filled response graph
-  as Simple (160 / 400 / 1k / 2.5k / 6.25 kHz, ±6 dB) over official
+  as Simple (160 / 400 / 1k / 2.5k / 6.25 kHz, ±12 dB) over official
   Airoha SPP + `libnative-peq`
 - Named local EQ snapshots and restore last curve on connect
 - **Find buds** page — illustrations, ring left or right, stop
@@ -99,7 +99,7 @@ Band gains go over **Bluetooth Classic SPP** to the Airoha RACE UUID
 | High mid | 2.5 kHz   |
 | Treble   | 6.25 kHz  |
 
-Range is **±6 dB**. The buds must already be paired as a normal Bluetooth
+Range is **±12 dB** (the official app stops at ±6). The buds must already be paired as a normal Bluetooth
 headset so Classic SPP can open.
 
 ## Supported devices

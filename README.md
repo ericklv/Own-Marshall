@@ -18,18 +18,11 @@ Current release: **1.1.9**.
 
 ## Package name / official app
 
-This build uses the **same Android package name** as official Marshall
-Bluetooth:
+Package id: `dev.unofficial.marshall`.
 
-`com.zoundindustries.marshallbt`
-
-Some Motif / Airoha behaviour (SPP RACE, pairing identity, firmware checks)
-keys off that id. Using it lets this APK spoof those checks.
-
-**You cannot install this next to the official app.** Android allows one
-app per package. Uninstall Marshall Bluetooth first, then sideload. Putting
-the official app back later replaces this one (or the install is refused if
-the signing keys differ).
+It does not reuse the official Marshall Bluetooth id, so both apps can be
+installed side by side. Do not run them at the same time: only one app
+should hold the BLE / SPP connection to the device.
 
 ## Features
 
@@ -71,8 +64,8 @@ Output:
 
 `app/build/outputs/apk/release/app-release.apk`
 
-Sideload it **after** uninstalling official Marshall Bluetooth (same package
-id — they cannot coexist). The home-screen name is **Unofficial Marshall**.
+Sideload it. It installs next to official Marshall Bluetooth. The
+home-screen name is **Unofficial Marshall**.
 
 ## Build from source
 

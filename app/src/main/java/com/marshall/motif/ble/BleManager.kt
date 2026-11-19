@@ -16,6 +16,7 @@ import com.marshall.motif.EqSnapshot
 import com.marshall.motif.WidgetStateStore
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
@@ -45,6 +46,8 @@ data class ScanDevice(
     val address: String,
     val rssi: Int,
     val isMarshall: Boolean,
+    /** BR/EDR MAC carried in the Zound advert, when present. */
+    val classicAddress: String? = null,
 )
 
 /**
@@ -66,6 +69,9 @@ class BleManager private constructor(private val context: Context) {
         private const val MAX_RECONNECT_ATTEMPTS = 10
         private const val PREF_EQ_PATH = "custom_eq_path"
         private const val PREF_KNOWN_DEVICES = "known_devices"
+        /** Manufacturer id in Zound LE adverts; payload bytes 2..7 hold the Classic MAC. */
+        private const val ZOUND_MANUFACTURER_ID = 0x065A
+        private const val RESOLVE_TIMEOUT_MS = 10_000L
 
         /** Notify only what the UI needs. Now-playing / volume / RACE flood the radio. */
         private val NOTIFY_CHARS = setOf(
@@ -146,6 +152,11 @@ class BleManager private constructor(private val context: Context) {
     private var gattOp: CompletableDeferred<Int>? = null
     private var pendingPermissionAction: (() -> Unit)? = null
     private var reconnectJob: Job? = null
+    private var resolveJob: Job? = null
+    /** Classic MAC by LE address, learned from Zound adverts. */
+    private val classicByLe = HashMap<String, String>()
+    /** Classic MAC of the product being controlled (SPP target). */
+    private var activeClassic: String? = null
     private var customEqJob: Job? = null
     private var eqHoldUntilMs: Long = 0L
     @Volatile private var raceReply: CompletableDeferred<ByteArray>? = null
@@ -258,15 +269,16 @@ class BleManager private constructor(private val context: Context) {
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
-            val name = device.name ?: return
-            if (name.isBlank()) return
-            val marshall = name.contains("MOTIF", ignoreCase = true) ||
-                    name.contains("Marshall", ignoreCase = true) ||
-                    name.contains("Willem", ignoreCase = true) ||
-                    name.contains("Major", ignoreCase = true) ||
-                    name.contains("Monitor", ignoreCase = true)
+            val classic = classicFromAdvert(result)
+            val zound = classic != null || advertisesZoundService(result)
+            // Advert name first: device.name is only the system cache and is often empty.
+            val name = result.scanRecord?.deviceName?.takeIf { it.isNotBlank() }
+                ?: device.name?.takeIf { it.isNotBlank() }
+                ?: if (zound) "Marshall" else return
+            if (classic != null) classicByLe[device.address.uppercase()] = classic
+            val marshall = zound || isMarshallName(name)
             scanResults = scanResults.filterNot { it.address == device.address } +
-                    ScanDevice(name, device.address, result.rssi, marshall)
+                    ScanDevice(name, device.address, result.rssi, marshall, classic)
             scanning = true
         }
 
@@ -294,6 +306,16 @@ class BleManager private constructor(private val context: Context) {
     }
 
     fun connect(address: String) = connect(address, userInitiated = true)
+
+    /** Over-ear products are saved under their Classic MAC so phone bonds and scans map to one entry. */
+    fun connect(device: ScanDevice) {
+        val classic = device.classicAddress
+        if (classic != null && !device.name.contains("MOTIF", ignoreCase = true)) {
+            connect(classic, userInitiated = true, leHint = device.address)
+        } else {
+            connect(device.address, userInitiated = true)
+        }
+    }
 
     fun switchTo(address: String) {
         if (address.isBlank()) return
@@ -357,7 +379,7 @@ class BleManager private constructor(private val context: Context) {
         postMessage("Device forgotten")
     }
 
-    private fun connect(address: String, userInitiated: Boolean) {
+    private fun connect(address: String, userInitiated: Boolean, leHint: String? = null) {
         withPermissions {
             val device = try {
                 adapter?.getRemoteDevice(address)
@@ -382,10 +404,104 @@ class BleManager private constructor(private val context: Context) {
                 deviceName = knownName.ifEmpty { state.deviceName },
             )
             rememberDevice(address, state.deviceName.ifBlank { knownName })
-            logLine("connect -> $address")
-            gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            val needsResolve = leHint == null && (
+                device.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
+                    device.type == BluetoothDevice.DEVICE_TYPE_DUAL
+                )
+            if (!needsResolve) {
+                activeClassic = if (leHint != null) address else classicByLe[address.uppercase()]
+                openGatt(leHint ?: address)
+                return@withPermissions
+            }
+            // Classic bond: GATT lives on a separate random LE address, find it via the advert.
+            activeClassic = address.uppercase()
+            logLine("resolve LE address for $address")
+            resolveJob = scope.launch {
+                val le = resolveLeAddress(address)
+                    ?: classicByLe.entries.firstOrNull { it.value.equals(address, ignoreCase = true) }?.key
+                if (le == null) logLine("resolve: no LE advert, trying $address directly")
+                openGatt(le ?: address)
+            }
         }
     }
+
+    private fun openGatt(address: String) {
+        val device = try {
+            adapter?.getRemoteDevice(address)
+        } catch (_: IllegalArgumentException) {
+            null
+        } ?: return connectionFailed("Bluetooth adapter unavailable")
+        logLine("connect -> $address")
+        gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    /** Scan for the Zound advert carrying [classic] and return its LE address. */
+    private suspend fun resolveLeAddress(classic: String): String? {
+        val scanner = adapter?.bluetoothLeScanner ?: return null
+        val mac = classic.split(":").mapNotNull { it.toIntOrNull(16)?.toByte() }
+        if (mac.size != 6) return null
+        val filter = ScanFilter.Builder()
+            .setManufacturerData(
+                ZOUND_MANUFACTURER_ID,
+                byteArrayOf(0, 0) + mac.toByteArray(),
+                byteArrayOf(0, 0) + ByteArray(6) { 0xFF.toByte() },
+            )
+            .build()
+        val found = CompletableDeferred<String?>()
+        val callback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (classicFromAdvert(result).equals(classic, ignoreCase = true)) {
+                    classicByLe[result.device.address.uppercase()] = classic.uppercase()
+                    found.complete(result.device.address)
+                }
+            }
+
+            override fun onScanFailed(errorCode: Int) {
+                logLine("resolve scan failed ($errorCode)")
+                found.complete(null)
+            }
+        }
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        try {
+            scanner.startScan(listOf(filter), settings, callback)
+        } catch (_: SecurityException) {
+            return null
+        }
+        return try {
+            withTimeoutOrNull(RESOLVE_TIMEOUT_MS) { found.await() }
+        } finally {
+            try {
+                scanner.stopScan(callback)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun classicFromAdvert(result: ScanResult): String? {
+        val data = result.scanRecord?.getManufacturerSpecificData(ZOUND_MANUFACTURER_ID) ?: return null
+        if (data.size < 8) return null
+        return (2..7).joinToString(":") { "%02X".format(data[it]) }
+    }
+
+    private fun advertisesZoundService(result: ScanResult): Boolean =
+        result.scanRecord?.serviceUuids.orEmpty().any {
+            it.uuid == MarshallGatt.LEGACY_SERVICE || it.uuid == MarshallGatt.PRIMARY_SERVICE
+        }
+
+    private fun isMarshallName(name: String): Boolean =
+        name.contains("MOTIF", ignoreCase = true) ||
+            name.contains("Marshall", ignoreCase = true) ||
+            name.contains("Willem", ignoreCase = true) ||
+            name.contains("Major", ignoreCase = true) ||
+            name.contains("Monitor", ignoreCase = true)
+
+    private suspend fun ensureSpp(): Boolean = raceSpp.ensureConnected(
+        adapter,
+        activeClassic,
+        motifFallback = state.deviceName.contains("MOTIF", ignoreCase = true),
+    )
 
     fun disconnect() {
         userInitiated = true
@@ -493,10 +609,9 @@ class BleManager private constructor(private val context: Context) {
         val motif = name.contains("MOTIF", ignoreCase = true)
         // Motif Classic (A2DP) shares the name without [LE] and is the wrong GATT target.
         if (motif) return name.contains("[LE]", ignoreCase = true)
-        return name.contains("Marshall", ignoreCase = true) ||
-            name.contains("Willem", ignoreCase = true) ||
-            name.contains("Major", ignoreCase = true) ||
-            name.contains("Monitor", ignoreCase = true)
+        // Other products are keyed by their Classic bond; the LE side is resolved on connect.
+        if (name.contains("[LE]", ignoreCase = true)) return false
+        return isMarshallName(name)
     }
 
     fun onDestroy() {
@@ -507,6 +622,8 @@ class BleManager private constructor(private val context: Context) {
     }
 
     private fun closeGatt() {
+        resolveJob?.cancel()
+        resolveJob = null
         gattOp?.complete(BluetoothGatt.GATT_FAILURE)
         gattOp = null
         if (gatt != null) {
@@ -598,14 +715,15 @@ class BleManager private constructor(private val context: Context) {
                 multipointAvailable = chars.containsKey(MarshallGatt.BT_CONNECTION_CONTROL),
             )
             reconnectAttempts = 0
-            rememberDevice(gatt.device.address, state.deviceName)
+            classicByLe[gatt.device.address.uppercase()]?.let { activeClassic = it }
+            rememberDevice(state.deviceAddress.ifBlank { gatt.device.address }, state.deviceName)
             postMessage("Connected to " + state.deviceName)
             gattMap.forEach { logLine(it) }
             scope.launch {
                 readAll()
                 subscribeAll()
                 resumeAirohaDsp()
-                raceSpp.ensureConnected(adapter)
+                ensureSpp()
                 refreshMultipoint()
                 maybeRestoreCustomEq()
             }
@@ -1145,7 +1263,7 @@ class BleManager private constructor(private val context: Context) {
 
     fun ringBuds(channel: Int, start: Boolean) {
         scope.launch {
-            if (!raceSpp.ensureConnected(adapter)) {
+            if (!ensureSpp()) {
                 postMessage("Classic SPP not up — cannot ring")
                 return@launch
             }
@@ -1325,7 +1443,7 @@ class BleManager private constructor(private val context: Context) {
             logLine("custom eq: native peq failed")
             return
         }
-        if (!raceSpp.ensureConnected(adapter)) {
+        if (!ensureSpp()) {
             logLine("custom eq: SPP not connected — GATT fallback")
             writeNoResponse(MarshallGatt.AIROHA_TX, packet)
             return

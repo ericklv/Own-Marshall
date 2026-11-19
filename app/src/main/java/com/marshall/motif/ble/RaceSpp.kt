@@ -31,7 +31,23 @@ class RaceSpp(private val log: (String) -> Unit) {
         socket = null
     }
 
-    fun findClassicMotif(adapter: BluetoothAdapter?): BluetoothDevice? {
+    /** Classic SPP target: the MAC from the Zound advert, else a bonded Motif when allowed. */
+    private fun findClassic(
+        adapter: BluetoothAdapter?,
+        classicAddress: String?,
+        motifFallback: Boolean,
+    ): BluetoothDevice? {
+        if (classicAddress != null) {
+            return try {
+                adapter?.getRemoteDevice(classicAddress)
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
+        return if (motifFallback) findClassicMotif(adapter) else null
+    }
+
+    private fun findClassicMotif(adapter: BluetoothAdapter?): BluetoothDevice? {
         val bonded = try {
             adapter?.bondedDevices
         } catch (_: SecurityException) {
@@ -44,13 +60,17 @@ class RaceSpp(private val log: (String) -> Unit) {
         } ?: bonded.firstOrNull { it.name.orEmpty().contains("MOTIF", ignoreCase = true) }
     }
 
-    suspend fun ensureConnected(adapter: BluetoothAdapter?): Boolean = withContext(Dispatchers.IO) {
+    suspend fun ensureConnected(
+        adapter: BluetoothAdapter?,
+        classicAddress: String?,
+        motifFallback: Boolean,
+    ): Boolean = withContext(Dispatchers.IO) {
         val open = socket
         if (open != null && open.isConnected) return@withContext true
         close()
-        val device = findClassicMotif(adapter)
+        val device = findClassic(adapter, classicAddress, motifFallback)
         if (device == null) {
-            log("spp: no bonded Motif Classic device")
+            log("spp: no Classic device for this product")
             return@withContext false
         }
         log("spp: connecting ${device.name} ${device.address}")

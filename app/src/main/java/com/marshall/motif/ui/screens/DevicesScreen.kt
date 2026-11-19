@@ -1,5 +1,7 @@
 package com.marshall.motif.ui.screens
 
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.marshall.motif.R
 import com.marshall.motif.ble.BleManager
+import com.marshall.motif.ble.isHeadphoneName
 import com.marshall.motif.ble.KnownDevice
 import com.marshall.motif.ui.components.AppTopBar
 import com.marshall.motif.ui.components.EarbudArt
@@ -112,6 +115,7 @@ fun DevicesScreen(
                 else -> "Not paired"
             },
             connected = state.connected,
+            headphones = isHeadphoneName(state.deviceName.ifBlank { hero?.name.orEmpty() }),
             leftBattery = state.leftBattery.takeIf { state.connected },
             rightBattery = state.rightBattery.takeIf { state.connected },
             onClick = {
@@ -282,6 +286,7 @@ private fun DeviceProductCard(
     name: String,
     status: String,
     connected: Boolean,
+    headphones: Boolean,
     leftBattery: Int?,
     rightBattery: Int?,
     onClick: () -> Unit,
@@ -348,7 +353,15 @@ private fun DeviceProductCard(
             ) {
                 // Square-ish canvas so the balanced composition stays centered
                 // (wide-only layout stretched the buds off the optical mid).
-                EarbudArt(
+                if (headphones) {
+                    Image(
+                        painter = painterResource(R.drawable.major_v),
+                        contentDescription = name,
+                        modifier = Modifier
+                            .height(200.dp)
+                            .alpha(if (connected) 1f else 0.48f),
+                    )
+                } else EarbudArt(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .height(200.dp),

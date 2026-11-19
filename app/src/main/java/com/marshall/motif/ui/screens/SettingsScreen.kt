@@ -99,7 +99,9 @@ fun SettingsScreen(
                 if (state.manufacturer.isNotEmpty()) InfoRow("Manufacturer", state.manufacturer)
                 InfoRow(
                     "Battery",
-                    buildString {
+                    if (state.isHeadphones) {
+                        (state.leftBattery ?: state.rightBattery)?.let { "$it%" } ?: "—"
+                    } else buildString {
                         append("L ${state.leftBattery?.let { "$it%" } ?: "—"}")
                         append("  ·  R ${state.rightBattery?.let { "$it%" } ?: "—"}")
                         append("  ·  Case ${state.caseBattery?.let { "$it%" } ?: "—"}")
@@ -135,7 +137,7 @@ fun SettingsScreen(
                     }
 
                     state.connecting -> HintText("Connecting…")
-                    else -> HintText("Connect earbuds from My Marshall to manage them here.")
+                    else -> HintText("Connect a device from My Marshall to manage it here.")
                 }
             }
         }
@@ -185,22 +187,26 @@ fun SettingsScreen(
         }
 
         SectionBlock("Sound behaviour") {
-            ToggleRow(
-                title = "In-ear detection",
-                subtitle = "Pause when an earbud is removed",
-                checked = state.wearDetectEnabled,
-                onCheckedChange = ble::setWearDetect,
-                icon = Icons.Rounded.Hearing,
-                enabled = state.connected,
-            )
-            ToggleRow(
-                title = "Touch controls",
-                subtitle = "Enable the touch surfaces",
-                checked = state.touchEnabled,
-                onCheckedChange = ble::setTouchEnabled,
-                icon = Icons.Rounded.TouchApp,
-                enabled = state.connected,
-            )
+            if (state.supports(MarshallGatt.WEAR_SENSOR_ACTION)) {
+                ToggleRow(
+                    title = "In-ear detection",
+                    subtitle = "Pause when an earbud is removed",
+                    checked = state.wearDetectEnabled,
+                    onCheckedChange = ble::setWearDetect,
+                    icon = Icons.Rounded.Hearing,
+                    enabled = state.connected,
+                )
+            }
+            if (state.supports(MarshallGatt.TOUCH_LOCK)) {
+                ToggleRow(
+                    title = "Touch controls",
+                    subtitle = "Enable the touch surfaces",
+                    checked = state.touchEnabled,
+                    onCheckedChange = ble::setTouchEnabled,
+                    icon = Icons.Rounded.TouchApp,
+                    enabled = state.connected,
+                )
+            }
             ToggleRow(
                 title = "Interaction sounds",
                 subtitle = "Play a tone on touch",
@@ -239,7 +245,7 @@ fun SettingsScreen(
             }
         }
 
-        if (state.has(MarshallGatt.ECO_CHARGING) || state.connected) {
+        if (state.supports(MarshallGatt.ECO_CHARGING)) {
             SectionBlock("Battery preservation") {
                 MarshallCard {
                     val options = listOf("none", "standard", "medium", "max")

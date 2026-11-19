@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.Image
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.painterResource
+import com.marshall.motif.R
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -143,6 +146,26 @@ fun BatteryLevelBar(
                 topLeft = Offset.Zero,
                 size = Size(fillW.coerceAtMost(size.width), h),
                 cornerRadius = r,
+            )
+        }
+    }
+}
+
+@Composable
+fun HeadphoneBattery(
+    value: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val glyphSize = Dimens.BatteryRing * 1.6f
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        BatteryCell(value = value, label = "Battery", glyphSize = glyphSize) {
+            Image(
+                painter = painterResource(R.drawable.major_v),
+                contentDescription = "Headphones",
+                modifier = Modifier.size(glyphSize),
             )
         }
     }

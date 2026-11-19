@@ -101,7 +101,19 @@ data class DeviceState(
     val gattMap: List<String> = emptyList(),
 ) {
     fun has(uuid: UUID): Boolean = availableChars.contains(uuid)
+
+    /** Shown while disconnected; once connected only if the device exposes [uuid]. */
+    fun supports(uuid: UUID): Boolean = !connected || has(uuid)
+
+    /** Over-ear products: one battery, no case, no per-ear gestures. */
+    val isHeadphones: Boolean
+        get() = isHeadphoneName(deviceName)
 }
+
+private val HEADPHONE_NAMES = listOf("MAJOR", "MONITOR", "MID A.N.C")
+
+fun isHeadphoneName(name: String): Boolean =
+    HEADPHONE_NAMES.any { name.contains(it, ignoreCase = true) }
 
 data class BtHost(
     val id: Int,

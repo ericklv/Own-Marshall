@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.marshall.motif.ble.BleManager
+import com.marshall.motif.ble.MarshallGatt
 import com.marshall.motif.ble.Protocol
 import com.marshall.motif.ui.components.AncModeRow
 import com.marshall.motif.ui.components.AppTopBar
@@ -83,7 +84,7 @@ fun SoundScreen(
         modifier = modifier,
         topBar = { AppTopBar(title = "Sound", onBack = onBack) },
     ) {
-        SectionBlock("Active noise control") {
+        if (state.supports(MarshallGatt.ANC_CONFIG)) SectionBlock("Active noise control") {
             AncModeRow(
                 selectedMode = state.ancMode,
                 onSelect = ble::setAncMode,

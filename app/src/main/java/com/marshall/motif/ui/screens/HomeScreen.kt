@@ -35,11 +35,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.marshall.motif.ble.BleManager
+import com.marshall.motif.ble.MarshallGatt
 import com.marshall.motif.ble.Protocol
 import com.marshall.motif.ui.components.AncModeRow
 import com.marshall.motif.ui.components.AppTopBar
 import com.marshall.motif.ui.components.BatteryRow
 import com.marshall.motif.ui.components.GroupedList
+import com.marshall.motif.ui.components.HeadphoneBattery
 import com.marshall.motif.ui.components.ListDivider
 import com.marshall.motif.ui.components.MarshallCard
 import com.marshall.motif.ui.components.ScreenScaffold
@@ -89,7 +91,7 @@ fun HomeScreen(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                 )
-                if (state.connected) {
+                if (state.connected && state.has(MarshallGatt.RENAME)) {
                     IconButton(
                         onClick = { showRename = true },
                         modifier = Modifier.size(36.dp),
@@ -115,7 +117,12 @@ fun HomeScreen(
 
             Spacer(Modifier.height(Space.Xl))
 
-            if (state.connected || state.connecting) {
+            if (state.isHeadphones && (state.connected || state.connecting)) {
+                HeadphoneBattery(
+                    value = state.leftBattery ?: state.rightBattery,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else if (state.connected || state.connecting) {
                 BatteryRow(
                     left = state.leftBattery,
                     right = state.rightBattery,
@@ -163,7 +170,7 @@ fun HomeScreen(
 
         }
 
-        SectionBlock("Active noise control") {
+        if (state.supports(MarshallGatt.ANC_CONFIG)) SectionBlock("Active noise control") {
             AncModeRow(
                 selectedMode = state.ancMode,
                 onSelect = ble::setAncMode,
@@ -199,31 +206,42 @@ fun HomeScreen(
             GroupedList {
                 SettingsRow(
                     title = "Sound",
-                    subtitle = "Equaliser and noise control",
+                    subtitle = if (state.supports(MarshallGatt.ANC_CONFIG)) {
+                        "Equaliser and noise control"
+                    } else {
+                        "Equaliser"
+                    },
                     icon = Icons.Rounded.GraphicEq,
                     onClick = onOpenSound,
                 )
-                ListDivider()
-                SettingsRow(
-                    title = "Controls and gestures",
-                    subtitle = "Customize taps and holds",
-                    icon = Icons.Rounded.TouchApp,
-                    onClick = onOpenControls,
-                )
-                ListDivider()
-                SettingsRow(
-                    title = "In-ear detection",
-                    subtitle = if (state.wearDetectEnabled) "On" else "Off",
-                    icon = Icons.Rounded.Hearing,
-                    onClick = onOpenWear,
-                )
-                ListDivider()
-                SettingsRow(
-                    title = "Find buds",
-                    subtitle = "Ring left or right",
-                    icon = Icons.Rounded.NotificationsActive,
-                    onClick = onOpenFind,
-                )
+                // Earbud gesture packets do not match the over-ear button map.
+                if (state.supports(MarshallGatt.TOUCH_MAP) && !state.isHeadphones) {
+                    ListDivider()
+                    SettingsRow(
+                        title = "Controls and gestures",
+                        subtitle = "Customize taps and holds",
+                        icon = Icons.Rounded.TouchApp,
+                        onClick = onOpenControls,
+                    )
+                }
+                if (state.supports(MarshallGatt.WEAR_SENSOR_ACTION)) {
+                    ListDivider()
+                    SettingsRow(
+                        title = "In-ear detection",
+                        subtitle = if (state.wearDetectEnabled) "On" else "Off",
+                        icon = Icons.Rounded.Hearing,
+                        onClick = onOpenWear,
+                    )
+                }
+                if (!state.isHeadphones) {
+                    ListDivider()
+                    SettingsRow(
+                        title = "Find buds",
+                        subtitle = "Ring left or right",
+                        icon = Icons.Rounded.NotificationsActive,
+                        onClick = onOpenFind,
+                    )
+                }
                 ListDivider()
                 SettingsRow(
                     title = "Device settings",
@@ -264,7 +282,7 @@ private fun RenameDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = MaterialTheme.shapes.large,
-        title = { Text("Rename earbuds") },
+        title = { Text("Rename device") },
         text = {
             OutlinedTextField(
                 value = name,

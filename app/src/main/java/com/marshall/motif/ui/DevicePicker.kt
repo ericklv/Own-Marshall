@@ -57,7 +57,7 @@ fun DevicePickerSheet(
     ) {
         Column(Modifier.padding(horizontal = Space.Lg)) {
             Text(
-                "Connect to earbuds",
+                "Connect a device",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -65,7 +65,7 @@ fun DevicePickerSheet(
             )
             Spacer(Modifier.height(Space.Xxs))
             Text(
-                "Open the charging case and keep your earbuds nearby.",
+                "Turn it on (open the case for earbuds) and keep it nearby.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -100,7 +100,7 @@ fun DevicePickerSheet(
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(results, key = { it.address }) { device ->
                                 ScanDeviceRow(device) {
-                                    ble.connect(device.address)
+                                    ble.connect(device)
                                     onDismiss()
                                 }
                             }
